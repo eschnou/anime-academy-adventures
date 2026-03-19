@@ -5,6 +5,7 @@ import type { Category } from '@/lib/api';
 import MissionCard from './MissionCard';
 import PowerLevelBar from './PowerLevelBar';
 import TopicDetail from './TopicDetail';
+import ProgressTracker from './ProgressTracker';
 
 interface DashboardProps {
   profile: UserProfile;
@@ -23,6 +24,7 @@ const Dashboard = ({ profile }: DashboardProps) => {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<Category | 'all'>('all');
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
+  const [showProgress, setShowProgress] = useState(false);
 
   useEffect(() => {
     loadTopics();
@@ -38,6 +40,15 @@ const Dashboard = ({ profile }: DashboardProps) => {
   const filteredTopics = activeFilter === 'all'
     ? topics
     : topics.filter(t => t.category === activeFilter);
+
+  if (showProgress) {
+    return (
+      <ProgressTracker
+        profile={profile}
+        onBack={() => setShowProgress(false)}
+      />
+    );
+  }
 
   if (selectedTopic) {
     return (
@@ -69,9 +80,17 @@ const Dashboard = ({ profile }: DashboardProps) => {
               {profile.rank} · Age {profile.age}
             </p>
           </div>
-          <div className="text-right">
-            <p className="font-display text-2xl text-primary">{profile.totalXp} XP</p>
-            <p className="font-body text-xs text-muted-foreground tracking-widest">POWER LEVEL</p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowProgress(true)}
+              className="px-4 py-2 bg-muted text-foreground border-brutal font-display text-xs tracking-widest shadow-brutal-sm impact-press hover:bg-muted/80 transition-all"
+            >
+              MY PROGRESS
+            </button>
+            <div className="text-right">
+              <p className="font-display text-2xl text-primary">{profile.totalXp} XP</p>
+              <p className="font-body text-xs text-muted-foreground tracking-widest">POWER LEVEL</p>
+            </div>
           </div>
         </div>
       </motion.header>
@@ -124,6 +143,29 @@ const Dashboard = ({ profile }: DashboardProps) => {
           </>
         )}
       </div>
+
+      {/* Footer */}
+      <footer className="border-t-[3px] border-foreground/20 bg-background/90 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-body text-sm text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} Kaizen Academy</p>
+          <div className="flex items-center gap-6">
+            <a
+              href="https://docs.kaizen-academy.example.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-primary transition-colors"
+            >
+              Documentation
+            </a>
+            <a
+              href="mailto:contact@kaizen-academy.example.com"
+              className="hover:text-primary transition-colors"
+            >
+              contact@kaizen-academy.example.com
+            </a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

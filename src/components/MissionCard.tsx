@@ -8,7 +8,7 @@ interface MissionCardProps {
   onClick: () => void;
 }
 
-const CATEGORY_COLORS: Record<Category, string> = {
+export const CATEGORY_COLORS: Record<Category, string> = {
   math: 'bg-primary text-primary-foreground',
   physics: 'bg-secondary text-secondary-foreground',
   science: 'bg-success text-success-foreground',
