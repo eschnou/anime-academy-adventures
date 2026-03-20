@@ -15,18 +15,24 @@ const ExerciseTerminal = ({ exercises, onComplete }: ExerciseTerminalProps) => {
   const [result, setResult] = useState<ExerciseResult | null>(null);
   const [totalXp, setTotalXp] = useState(0);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const exercise = exercises[currentIndex];
   if (!exercise) return null;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const answer = exercise.type === 'fill-blank' ? fillAnswer : selectedAnswer;
-    if (!answer) return;
+    if (!answer || submitting) return;
 
-    const res = TopicService.submitAnswer(exercise, answer);
-    setResult(res);
-    setShowExplanation(true);
-    setTotalXp(prev => prev + res.xpEarned);
+    setSubmitting(true);
+    try {
+      const res = await TopicService.submitAnswer(exercise, answer);
+      setResult(res);
+      setShowExplanation(true);
+      setTotalXp(prev => prev + res.xpEarned);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleNext = () => {
@@ -137,10 +143,10 @@ const ExerciseTerminal = ({ exercises, onComplete }: ExerciseTerminalProps) => {
             {!result ? (
               <button
                 onClick={handleSubmit}
-                disabled={!selectedAnswer && !fillAnswer}
+                disabled={(!selectedAnswer && !fillAnswer) || submitting}
                 className="px-8 py-3 bg-primary border-brutal font-display text-lg tracking-widest text-primary-foreground shadow-brutal impact-press hover:-rotate-1 transition-transform disabled:opacity-30 disabled:cursor-not-allowed"
               >
-                SUBMIT ⚔️
+                {submitting ? 'SUBMITTING...' : 'SUBMIT ⚔️'}
               </button>
             ) : (
               <button

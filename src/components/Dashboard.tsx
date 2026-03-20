@@ -9,6 +9,7 @@ import ProgressTracker from './ProgressTracker';
 
 interface DashboardProps {
   profile: UserProfile;
+  onProfileUpdate?: (profile: UserProfile) => void;
 }
 
 const CATEGORY_FILTERS: { id: Category | 'all'; label: string; icon: string }[] = [
@@ -19,7 +20,7 @@ const CATEGORY_FILTERS: { id: Category | 'all'; label: string; icon: string }[] 
   { id: 'biology', label: 'BIOLOGY', icon: '🧬' },
 ];
 
-const Dashboard = ({ profile }: DashboardProps) => {
+const Dashboard = ({ profile, onProfileUpdate }: DashboardProps) => {
   const [topics, setTopics] = useState<EnrichedTopic[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<Category | 'all'>('all');
@@ -35,6 +36,14 @@ const Dashboard = ({ profile }: DashboardProps) => {
     const data = await TopicService.getAvailableMissions(profile.age);
     setTopics(data);
     setLoading(false);
+  };
+
+  const refreshAfterExercise = async () => {
+    const [updated] = await Promise.all([
+      TopicService.getProfile(),
+      loadTopics(),
+    ]);
+    if (updated) onProfileUpdate?.(updated);
   };
 
   const filteredTopics = activeFilter === 'all'
@@ -56,7 +65,7 @@ const Dashboard = ({ profile }: DashboardProps) => {
         topicId={selectedTopic}
         onBack={() => {
           setSelectedTopic(null);
-          loadTopics(); // Refresh progress
+          refreshAfterExercise();
         }}
       />
     );

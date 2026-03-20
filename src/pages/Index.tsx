@@ -1,21 +1,43 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import Landing from '@/components/Landing';
 import AgeGate from '@/components/AgeGate';
 import Dashboard from '@/components/Dashboard';
 import { TopicService, type UserProfile } from '@/services/topicService';
+import PowerLevelBar from '@/components/PowerLevelBar';
 
-type Screen = 'landing' | 'age-gate' | 'dashboard';
+type Screen = 'landing' | 'age-gate' | 'dashboard' | 'loading';
 
 const Index = () => {
-  const [screen, setScreen] = useState<Screen>('landing');
+  const [screen, setScreen] = useState<Screen>('loading');
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
-  const handleAgeSubmit = (age: number) => {
-    const newProfile = TopicService.createProfile(age);
+  useEffect(() => {
+    const restoreSession = async () => {
+      const existing = await TopicService.getProfile();
+      if (existing) {
+        setProfile(existing);
+        setScreen('dashboard');
+      } else {
+        setScreen('landing');
+      }
+    };
+    restoreSession();
+  }, []);
+
+  const handleAgeSubmit = async (age: number) => {
+    const newProfile = await TopicService.createProfile(age);
     setProfile(newProfile);
     setScreen('dashboard');
   };
+
+  if (screen === 'loading') {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <PowerLevelBar />
+      </div>
+    );
+  }
 
   return (
     <AnimatePresence mode="wait">
@@ -26,7 +48,7 @@ const Index = () => {
         <AgeGate key="gate" onAgeSubmit={handleAgeSubmit} />
       )}
       {screen === 'dashboard' && profile && (
-        <Dashboard key="dashboard" profile={profile} />
+        <Dashboard key="dashboard" profile={profile} onProfileUpdate={setProfile} />
       )}
     </AnimatePresence>
   );

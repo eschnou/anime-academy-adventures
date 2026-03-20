@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TopicService, type UserProfile, type ProgressStats } from '@/services/topicService';
 import { CATEGORY_COLORS } from './MissionCard';
 import type { Category } from '@/lib/api';
+import PowerLevelBar from './PowerLevelBar';
 
 interface ProgressTrackerProps {
   profile: UserProfile;
@@ -36,14 +38,40 @@ const RANK_THRESHOLDS = [
 const ease = [0.34, 1.56, 0.64, 1] as const;
 
 const ProgressTracker = ({ profile, onBack }: ProgressTrackerProps) => {
-  const stats: ProgressStats = TopicService.getProgressStats();
+  const [stats, setStats] = useState<ProgressStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadStats = async () => {
+      setLoading(true);
+      try {
+        const data = await TopicService.getProgressStats();
+        if (!cancelled) setStats(data);
+      } catch {
+        // If no user session, stats will be null
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    loadStats();
+    return () => { cancelled = true; };
+  }, []);
 
   const currentRankInfo = RANK_THRESHOLDS.find(r => r.rank === profile.rank)!;
   const xpInRank = profile.totalXp - currentRankInfo.min;
   const xpRankRange = currentRankInfo.max === Infinity ? 500 : currentRankInfo.max - currentRankInfo.min;
   const rankProgress = Math.min(100, Math.round((xpInRank / xpRankRange) * 100));
 
-  if (stats.totalAttempts === 0) {
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <PowerLevelBar />
+      </div>
+    );
+  }
+
+  if (!stats || stats.totalAttempts === 0) {
     return (
       <div className="min-h-screen bg-background halftone flex items-center justify-center p-4">
         <motion.div

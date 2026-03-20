@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface AgeGateProps {
-  onAgeSubmit: (age: number) => void;
+  onAgeSubmit: (age: number) => void | Promise<void>;
 }
 
 const AgeGate = ({ onAgeSubmit }: AgeGateProps) => {

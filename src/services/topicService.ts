@@ -1,15 +1,10 @@
-// ─── SERVICE LAYER ─── Business logic, progress tracking, XP calculations
+// ─── SERVICE LAYER ─── Stateless facade over the backend API
 
-import { MockAPI, type Topic, type Exercise, type InfoScroll, type Category } from '@/lib/api';
+import { API } from '@/lib/api';
+import type { Topic, Exercise, InfoScroll, Category, UserProfile, ExerciseResult, ProgressStats } from '@/lib/api';
 
-export type NinjaRank = 'Genin' | 'Chunin' | 'Jonin';
-
-export interface UserProfile {
-  age: number;
-  rank: NinjaRank;
-  totalXp: number;
-  completedExercises: string[];
-}
+export type { UserProfile, ExerciseResult, ProgressStats };
+export type { NinjaRank, ExerciseAttempt } from '@/lib/api';
 
 export interface EnrichedTopic extends Topic {
   isUnlocked: boolean;
@@ -17,72 +12,39 @@ export interface EnrichedTopic extends Topic {
   progress: number; // 0-100
 }
 
-export interface ExerciseResult {
-  exerciseId: string;
-  isCorrect: boolean;
-  xpEarned: number;
-  message: string;
-}
+const STORAGE_KEY = 'kaizen_userId';
 
-export interface ExerciseAttempt {
-  exerciseId: string;
-  topicId: string;
-  category: Category;
-  exerciseType: 'multiple-choice' | 'fill-blank' | 'true-false';
-  isCorrect: boolean;
-  xpEarned: number;
-  timestamp: number;
-}
-
-export interface ProgressStats {
-  totalAttempts: number;
-  correctAttempts: number;
-  accuracy: number;
-  categoryBreakdown: Record<Category, { attempts: number; correct: number; accuracy: number }>;
-  exerciseTypeBreakdown: Record<'multiple-choice' | 'fill-blank' | 'true-false', { attempts: number; correct: number }>;
-  recentAttempts: ExerciseAttempt[];
-}
-
-const getRankForAge = (age: number): NinjaRank => {
-  if (age <= 8) return 'Genin';
-  if (age <= 11) return 'Chunin';
-  return 'Jonin';
-};
-
-const TOPIC_PREFIX_TO_CATEGORY: Record<string, Category> = {
-  math: 'math',
-  physics: 'physics',
-  science: 'science',
-  bio: 'biology',
-};
-
-const getCategoryFromTopicId = (topicId: string): Category => {
-  const prefix = topicId.split('-')[0];
-  return TOPIC_PREFIX_TO_CATEGORY[prefix] ?? prefix as Category;
-};
-
-// In-memory state (will be replaced by backend)
-let currentProfile: UserProfile | null = null;
-let attemptHistory: ExerciseAttempt[] = [];
+const getUserId = (): string | null => localStorage.getItem(STORAGE_KEY);
 
 export const TopicService = {
-  createProfile: (age: number): UserProfile => {
-    currentProfile = {
-      age,
-      rank: getRankForAge(age),
-      totalXp: 0,
-      completedExercises: [],
-    };
-    attemptHistory = [];
-    return currentProfile;
+  createProfile: async (age: number): Promise<UserProfile> => {
+    const profile = await API.createUser(age);
+    localStorage.setItem(STORAGE_KEY, profile.id);
+    return profile;
   },
 
-  getProfile: (): UserProfile | null => currentProfile,
+  getProfile: async (): Promise<UserProfile | null> => {
+    const userId = getUserId();
+    if (!userId) return null;
+    try {
+      return await API.getUser(userId);
+    } catch {
+      return null;
+    }
+  },
+
+  clearSession: () => {
+    localStorage.removeItem(STORAGE_KEY);
+  },
 
   getAvailableMissions: async (userAge: number): Promise<EnrichedTopic[]> => {
-    const topics = await MockAPI.getTopics(userAge);
-    const completed = currentProfile?.completedExercises ?? [];
-    
+    const userId = getUserId();
+    const [topics, profile] = await Promise.all([
+      API.getTopics(userAge),
+      userId ? API.getUser(userId) : Promise.resolve(null),
+    ]);
+    const completed = profile?.completedExercises ?? [];
+
     return topics.map(topic => ({
       ...topic,
       isUnlocked: true,
@@ -99,86 +61,33 @@ export const TopicService = {
   },
 
   getExercises: async (topicId: string): Promise<Exercise[]> => {
-    return MockAPI.getExercises(topicId);
+    return API.getExercises(topicId);
   },
 
   getInfoScrolls: async (topicId: string): Promise<InfoScroll[]> => {
-    return MockAPI.getInfoScrolls(topicId);
+    return API.getInfoScrolls(topicId);
   },
 
   getTopicDetail: async (topicId: string) => {
     const [topic, exercises, scrolls] = await Promise.all([
-      MockAPI.getTopicById(topicId),
-      MockAPI.getExercises(topicId),
-      MockAPI.getInfoScrolls(topicId),
+      API.getTopicById(topicId).catch(() => null),
+      API.getExercises(topicId),
+      API.getInfoScrolls(topicId),
     ]);
     return { topic, exercises, scrolls };
   },
 
-  submitAnswer: (exercise: Exercise, answer: string): ExerciseResult => {
-    const isCorrect = answer === exercise.correctAnswer;
-    const xpEarned = isCorrect ? exercise.xpReward : 0;
-
-    if (currentProfile && isCorrect) {
-      currentProfile.totalXp += xpEarned;
-      if (!currentProfile.completedExercises.includes(exercise.id)) {
-        currentProfile.completedExercises.push(exercise.id);
-      }
-    }
-
-    attemptHistory.push({
-      exerciseId: exercise.id,
-      topicId: exercise.topicId,
-      category: getCategoryFromTopicId(exercise.topicId),
-      exerciseType: exercise.type,
-      isCorrect,
-      xpEarned,
-      timestamp: Date.now(),
-    });
-
-    return {
-      exerciseId: exercise.id,
-      isCorrect,
-      xpEarned,
-      message: isCorrect
-        ? 'S-RANK ATTAINED. YOUR BRAIN IS OVER 9000!'
-        : 'MISSION FAILED. RETREAT, REGROUP, RE-LEARN.',
-    };
+  submitAnswer: async (exercise: Exercise, answer: string): Promise<ExerciseResult> => {
+    const userId = getUserId();
+    if (!userId) throw new Error('No user session');
+    return API.submitAttempt(userId, exercise.id, answer);
   },
 
-  getAttemptHistory: (): ExerciseAttempt[] => attemptHistory,
-
-  getProgressStats: (): ProgressStats => {
-    const totalAttempts = attemptHistory.length;
-    const correctAttempts = attemptHistory.filter(a => a.isCorrect).length;
-    const accuracy = totalAttempts > 0 ? Math.round((correctAttempts / totalAttempts) * 100) : 0;
-
-    const categories: Category[] = ['math', 'physics', 'science', 'biology'];
-    const categoryBreakdown = {} as ProgressStats['categoryBreakdown'];
-    for (const cat of categories) {
-      const catAttempts = attemptHistory.filter(a => a.category === cat);
-      const catCorrect = catAttempts.filter(a => a.isCorrect).length;
-      categoryBreakdown[cat] = {
-        attempts: catAttempts.length,
-        correct: catCorrect,
-        accuracy: catAttempts.length > 0 ? Math.round((catCorrect / catAttempts.length) * 100) : 0,
-      };
-    }
-
-    const types = ['multiple-choice', 'fill-blank', 'true-false'];
-    const exerciseTypeBreakdown = {} as ProgressStats['exerciseTypeBreakdown'];
-    for (const t of types) {
-      const typeAttempts = attemptHistory.filter(a => a.exerciseType === t);
-      exerciseTypeBreakdown[t] = {
-        attempts: typeAttempts.length,
-        correct: typeAttempts.filter(a => a.isCorrect).length,
-      };
-    }
-
-    const recentAttempts = attemptHistory.slice(-10).reverse();
-
-    return { totalAttempts, correctAttempts, accuracy, categoryBreakdown, exerciseTypeBreakdown, recentAttempts };
+  getProgressStats: async (): Promise<ProgressStats> => {
+    const userId = getUserId();
+    if (!userId) throw new Error('No user session');
+    return API.getProgress(userId);
   },
 
-  getCategories: () => MockAPI.getAllCategories(),
+  getCategories: () => API.getCategories(),
 };
